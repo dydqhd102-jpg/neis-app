@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>우리학교 학사일정 - NEIS OPEN API 스마트 달력</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- FullCalendar CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+  <style>
+    body { background-color: #FBF9F7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .fc-header-toolbar { margin-bottom: 1rem !important; }
+    .fc-button-primary { background-color: #44403C !important; border-color: #44403C !important; border-radius: 0.75rem !important; }
+    .fc-daygrid-day-number { font-weight: 600; color: #1C1917; text-decoration: none !important; }
+  </style>
+</head>
+<body class="text-stone-900 min-h-screen flex flex-col items-center p-4">
+  <div class="w-full max-w-2xl bg-white rounded-3xl shadow-lg border border-stone-200 p-6">
+    
+    <!-- Top Header -->
+    <header class="flex items-center justify-between pb-4 border-b border-stone-100">
+      <div>
+        <h1 class="text-2xl font-bold text-stone-800 tracking-tight">🏫 우리학교 학사일정</h1>
+        <p class="text-xs text-stone-500 font-medium mt-0.5">NEIS Open API 실시간 달력 연동</p>
+      </div>
+      <span class="text-xs font-semibold bg-stone-100 text-stone-700 px-3 py-1 rounded-full border border-stone-200">
+        Natural Tones
+      </span>
+    </header>
+
+    <!-- School Search Form -->
+    <section class="mt-5">
+      <div class="relative flex items-center">
+        <input id="schoolSearchInput" type="text" placeholder="학교명을 입력하세요 (예: 서울고, 경기고)" 
+               class="w-full bg-stone-50 border border-stone-200 rounded-2xl py-3 pl-11 pr-24 text-stone-800 text-sm focus:outline-none focus:ring-2 focus:ring-stone-400">
+        <span class="absolute left-4 text-stone-400">🔍</span>
+        <button id="searchBtn" onclick="searchSchool()" class="absolute right-2 bg-stone-800 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-stone-700 transition-colors">
+          검색
+        </button>
+      </div>
+      <div id="searchResults" class="mt-2 space-y-1 hidden bg-white border border-stone-200 rounded-2xl p-2 shadow-md max-h-48 overflow-y-auto"></div>
+    </section>
+
+    <!-- Selected School Info Banner -->
+    <div id="schoolBanner" class="mt-4 bg-stone-100 rounded-2xl p-4 flex items-center justify-between border border-stone-200">
+      <div>
+        <h2 id="selectedSchoolName" class="font-bold text-stone-800 text-lg">서울고등학교</h2>
+        <p id="selectedSchoolDetail" class="text-xs text-stone-500">서울특별시교육청 • 서울특별시</p>
+      </div>
+      <span id="schoolTypeBadge" class="bg-stone-800 text-white text-xs font-semibold px-2.5 py-1 rounded-lg">고등학교</span>
+    </div>
+
+    <!-- Calendar Container -->
+    <main class="mt-6">
+      <div id="calendar" class="bg-white rounded-2xl p-2 border border-stone-100"></div>
+    </main>
+
+    <!-- Footer Guide -->
+    <footer class="mt-6 pt-4 border-t border-stone-100 text-center text-xs text-stone-400">
+      <p>NEIS API KEY: <span class="font-mono text-stone-600 font-semibold">423d33e6f9d84fc0963ba94d0c9fb887</span></p>
+      <p class="mt-1">GitHub Pages 도메인 허용 등록 후 사용하세요.</p>
+    </footer>
+  </div>
+
+  <script>
+    const API_KEY = "423d33e6f9d84fc0963ba94d0c9fb887";
+    let currentSchool = { officeCode: "B10", schoolCode: "7010057", name: "서울고등학교" };
+    let calendar;
+
+    document.addEventListener("DOMContentLoaded", function() {
+      const calendarEl = document.getElementById("calendar");
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: "dayGridMonth",
+        locale: "ko",
+        height: "auto",
+        events: function(fetchInfo, successCallback, failureCallback) {
+          fetchSchedule(fetchInfo.startStr, fetchInfo.endStr, successCallback);
+        }
+      });
+      calendar.render();
+    });
+
+    async function searchSchool() {
+      const query = document.getElementById("schoolSearchInput").value.trim();
+      if (!query) return;
+
+      const url = `https://open.neis.go.kr/hub/schoolInfo?KEY=${API_KEY}&Type=json&pIndex=1&pSize=10&SCHUL_NM=${encodeURIComponent(query)}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const resultsEl = document.getElementById("searchResults");
+        resultsEl.innerHTML = "";
+        resultsEl.classList.remove("hidden");
+
+        if (data.schoolInfo && data.schoolInfo[1].row) {
+          data.schoolInfo[1].row.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "p-2.5 hover:bg-stone-100 rounded-xl cursor-pointer flex justify-between items-center text-xs";
+            div.innerHTML = `<span class="font-bold text-stone-800">${item.SCHUL_NM}</span><span class="text-stone-400">${item.ATPT_OFCDC_SC_NM}</span>`;
+            div.onclick = () => selectSchool(item);
+            resultsEl.appendChild(div);
+          });
+        } else {
+          resultsEl.innerHTML = `<div class="p-3 text-xs text-stone-400 text-center">검색 결과가 없습니다.</div>`;
+        }
+      } catch (e) {
+        alert("학교 검색 오류: " + e.message);
+      }
+    }
+
+    function selectSchool(item) {
+      currentSchool = {
+        officeCode: item.ATPT_OFCDC_SC_CODE,
+        schoolCode: item.SD_SCHUL_CODE,
+        name: item.SCHUL_NM
+      };
+      document.getElementById("selectedSchoolName").innerText = item.SCHUL_NM;
+      document.getElementById("selectedSchoolDetail").innerText = `${item.ATPT_OFCDC_SC_NM} • ${item.LCTN_SC_NM}`;
+      document.getElementById("searchResults").classList.add("hidden");
+      calendar.refetchEvents();
+    }
+
+    async function fetchSchedule(startStr, endStr, callback) {
+      const ym = startStr.replace(/-/g, "").substring(0, 6);
+      const url = `https://open.neis.go.kr/hub/SchoolSchedule?KEY=${API_KEY}&Type=json&pIndex=1&pSize=100&ATPT_OFCDC_SC_CODE=${currentSchool.officeCode}&SD_SCHUL_CODE=${currentSchool.schoolCode}&AA_YMD=${ym}`;
+      
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const events = [];
+        if (data.SchoolSchedule && data.SchoolSchedule[1].row) {
+          data.SchoolSchedule[1].row.forEach(row => {
+            const dateFormatted = `${row.AA_YMD.substring(0,4)}-${row.AA_YMD.substring(4,6)}-${row.AA_YMD.substring(6,8)}`;
+            events.push({
+              title: row.EVENT_NM,
+              start: dateFormatted,
+              color: row.EVENT_NM.includes("시험") || row.EVENT_NM.includes("고사") ? "#EF4444" : "#44403C"
+            });
+          });
+        }
+        callback(events);
+      } catch (e) {
+        console.error("학사일정 가져오기 실패", e);
+        callback([]);
+      }
+    }
+  </script>
+</body>
+</html>
